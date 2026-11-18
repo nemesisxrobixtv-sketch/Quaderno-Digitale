@@ -1,0 +1,1200 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GoodNotes AI - Quaderno Digitale Gratuito</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Plus Jakarta Sans', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            background-color: #E2E8F0;
+            margin: 0;
+            padding: 0;
+            overscroll-behavior-y: contain;
+        }
+
+        .app-container {
+            max-width: 960px;
+            margin: 0 auto;
+            min-height: 100dvh;
+            background-color: #F8FAFC;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.2);
+            position: relative;
+        }
+
+        .notebook-cover {
+            aspect-ratio: 3 / 4;
+            border-radius: 6px 16px 16px 6px;
+            position: relative;
+            box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.15), inset 4px 0 8px rgba(255, 255, 255, 0.3);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .notebook-cover::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 12px;
+            width: 3px;
+            background: rgba(0, 0, 0, 0.15);
+        }
+        .notebook-cover:active {
+            transform: scale(0.97);
+        }
+
+        .paper-sheet {
+            width: 100%;
+            min-height: 820px;
+            background-color: #FFFFFF;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            position: relative;
+            overflow: hidden;
+            transition: background-color 0.2s ease;
+        }
+
+        .paper-blank { background-color: #FFFFFF; }
+        .paper-ivory { background-color: #FDFBF7; }
+        .paper-lined {
+            background-color: #FFFFFF;
+            background-image: linear-gradient(#E2E8F0 1px, transparent 1px);
+            background-size: 100% 34px;
+            background-position: 0 24px;
+        }
+        .paper-grid {
+            background-color: #FFFFFF;
+            background-image: 
+                linear-gradient(to right, #E2E8F0 1px, transparent 1px),
+                linear-gradient(to bottom, #E2E8F0 1px, transparent 1px);
+            background-size: 26px 26px;
+        }
+        .paper-dotted {
+            background-color: #FFFFFF;
+            background-image: radial-gradient(#CBD5E1 1.4px, transparent 1.4px);
+            background-size: 24px 24px;
+        }
+
+        #note-text-layer {
+            position: relative;
+            z-index: 10;
+            min-height: 820px;
+            padding: 32px 28px;
+            outline: none;
+            color: #0F172A;
+            font-family: 'Inter', sans-serif;
+            font-size: 17px;
+            line-height: 34px;
+            letter-spacing: 0.01em;
+            word-wrap: break-word;
+        }
+        @media (max-width: 640px) {
+            #note-text-layer { padding: 24px 18px; font-size: 16px; }
+        }
+        #note-text-layer:empty:before {
+            content: attr(data-placeholder);
+            color: #94A3B8;
+            pointer-events: none;
+            display: block;
+        }
+        #note-text-layer h2 {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 1.35em;
+            font-weight: 800;
+            color: #1E293B;
+            margin-top: 12px;
+            margin-bottom: 6px;
+        }
+        #note-text-layer h3 {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 1.12em;
+            font-weight: 700;
+            color: #2563EB;
+            margin-top: 14px;
+            margin-bottom: 4px;
+        }
+        #note-text-layer ul { list-style-type: disc; padding-left: 24px; margin: 6px 0; }
+        #note-text-layer li { margin-bottom: 4px; }
+
+        #drawing-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 20;
+            pointer-events: none;
+        }
+        #drawing-canvas.active-draw {
+            pointer-events: auto;
+            touch-action: none;
+            cursor: crosshair;
+        }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        @keyframes pulse-rec {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.15); opacity: 0.75; }
+        }
+        .animate-rec { animation: pulse-rec 1.2s infinite ease-in-out; }
+    </style>
+</head>
+<body class="antialiased text-slate-900">
+
+    <div class="app-container" id="app">
+
+        <!-- ==================== LIBRERIA QUADERNI ==================== -->
+        <div id="view-library" class="flex-1 flex flex-col">
+            <header class="bg-white/90 backdrop-blur-md border-b border-slate-200 px-5 py-4 sticky top-0 z-30">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-sm">
+                            <i class="ph-fill ph-notebook text-2xl"></i>
+                        </div>
+                        <div>
+                            <h1 class="font-display font-extrabold text-xl text-slate-900 tracking-tight leading-none">GoodNotes AI</h1>
+                            <span class="text-xs font-medium text-emerald-600 flex items-center gap-1 mt-1">
+                                <i class="ph-fill ph-check-circle"></i> Sbobinatura AI & APK Android
+                            </span>
+                        </div>
+                    </div>
+
+                    <button onclick="openApkModal()" class="flex items-center gap-1.5 bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-semibold hover:bg-slate-800 active:scale-95 transition shadow-xs">
+                        <i class="ph-bold ph-android-logo text-base text-emerald-400"></i>
+                        <span>Installa APK</span>
+                    </button>
+                </div>
+
+                <div class="relative">
+                    <i class="ph ph-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-lg"></i>
+                    <input type="text" id="library-search" oninput="renderLibrary()" placeholder="Cerca quaderni o appunti scolastici..."
+                        class="w-full bg-slate-100 text-slate-800 placeholder-slate-400 rounded-xl py-2.5 pl-10 pr-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:bg-white transition">
+                </div>
+            </header>
+
+            <main class="flex-1 p-5 pb-24 overflow-y-auto">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="font-display font-bold text-xs uppercase tracking-wider text-slate-500">I tuoi Quaderni</h2>
+                    <span id="notebooks-count" class="text-xs font-semibold text-slate-400">0 quaderni</span>
+                </div>
+
+                <div id="notebooks-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-5"></div>
+            </main>
+        </div>
+
+        <!-- ==================== EDITOR QUADERNO GOODNOTES ==================== -->
+        <div id="view-editor" class="hidden flex-1 flex flex-col bg-slate-100">
+            
+            <header class="bg-white border-b border-slate-200 px-3 py-2 flex items-center justify-between sticky top-0 z-30">
+                <div class="flex items-center gap-2 min-w-0">
+                    <button onclick="closeNotebook()" class="p-2 rounded-xl hover:bg-slate-100 text-slate-700 active:scale-90 transition shrink-0" title="Torna alla libreria">
+                        <i class="ph-bold ph-caret-left text-xl"></i>
+                    </button>
+                    <div class="min-w-0">
+                        <input type="text" id="notebook-title-input" oninput="saveCurrentNotebook()" placeholder="Titolo Quaderno..."
+                            class="font-display font-bold text-base text-slate-900 bg-transparent focus:outline-none truncate w-full">
+                        <div class="flex items-center gap-2 text-[11px] text-slate-400">
+                            <span id="notebook-subject-badge" class="font-semibold text-blue-600">Materia</span>
+                            <span>•</span>
+                            <span id="save-indicator">Salvato</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <button onclick="openRecorderPanel()" class="flex items-center gap-1.5 bg-rose-50 text-rose-600 border border-rose-200 px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-rose-100 active:scale-95 transition">
+                        <i class="ph-fill ph-microphone text-base"></i>
+                        <span class="hidden sm:inline">Registra Lezione</span>
+                        <span class="sm:hidden">Rec</span>
+                    </button>
+
+                    <button onclick="openAiPanel()" class="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-blue-700 active:scale-95 transition shadow-xs">
+                        <i class="ph-fill ph-sparkle text-base"></i>
+                        <span>AI Studio</span>
+                    </button>
+
+                    <button onclick="openPaperMenu()" class="p-2 rounded-xl hover:bg-slate-100 text-slate-700 active:scale-90 transition" title="Opzioni foglio">
+                        <i class="ph-bold ph-dots-three-outline-vertical text-lg"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- BARRA STRUMENTI GOODNOTES -->
+            <div class="bg-slate-50 border-b border-slate-200 px-3 py-2 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar sticky top-[57px] z-20">
+                <div class="flex items-center bg-white p-1 rounded-xl border border-slate-200 shadow-2xs shrink-0">
+                    <button id="tool-text" onclick="setTool('text')" class="tool-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white transition">
+                        <i class="ph-bold ph-text-t text-base"></i>
+                        <span>Testo</span>
+                    </button>
+                    <button id="tool-pen" onclick="setTool('pen')" class="tool-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100 transition">
+                        <i class="ph-bold ph-pen-nib text-base"></i>
+                        <span>Penna</span>
+                    </button>
+                    <button id="tool-highlighter" onclick="setTool('highlighter')" class="tool-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100 transition">
+                        <i class="ph-bold ph-highlighter text-base"></i>
+                        <span>Evidenzia</span>
+                    </button>
+                    <button id="tool-eraser" onclick="setTool('eraser')" class="tool-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100 transition">
+                        <i class="ph-bold ph-eraser text-base"></i>
+                        <span>Gomma</span>
+                    </button>
+                </div>
+
+                <!-- Sottomenu Testo -->
+                <div id="sub-toolbar-text" class="flex items-center gap-1 bg-white px-2 py-1 rounded-xl border border-slate-200 shrink-0">
+                    <button onmousedown="event.preventDefault(); execTextCmd('bold')" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-700" title="Grassetto"><i class="ph-bold ph-text-b text-base"></i></button>
+                    <button onmousedown="event.preventDefault(); execTextCmd('underline')" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-700" title="Sottolinea"><i class="ph-bold ph-text-underline text-base"></i></button>
+                    <button onmousedown="event.preventDefault(); execTextCmd('insertUnorderedList')" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-700" title="Elenco puntato"><i class="ph-bold ph-list-bullets text-base"></i></button>
+                    <div class="h-4 w-[1px] bg-slate-200 mx-1"></div>
+                    <button onmousedown="event.preventDefault(); highlightSelectedText('#FEF08A')" class="w-6 h-6 rounded-full bg-yellow-200 border border-yellow-400" title="Giallo"></button>
+                    <button onmousedown="event.preventDefault(); highlightSelectedText('#BBF7D0')" class="w-6 h-6 rounded-full bg-green-200 border border-green-400" title="Verde"></button>
+                    <button onmousedown="event.preventDefault(); highlightSelectedText('#FBCFE8')" class="w-6 h-6 rounded-full bg-pink-200 border border-pink-400" title="Rosa"></button>
+                    <button onmousedown="event.preventDefault(); highlightSelectedText('transparent')" class="p-1 rounded-lg hover:bg-slate-100 text-slate-400" title="Rimuovi"><i class="ph-bold ph-prohibit text-sm"></i></button>
+                    <div class="h-4 w-[1px] bg-slate-200 mx-1"></div>
+                    <button onclick="changeFontSize(-1)" class="px-1.5 py-1 rounded-lg hover:bg-slate-100 text-xs font-bold text-slate-600">A-</button>
+                    <button onclick="changeFontSize(1)" class="px-1.5 py-1 rounded-lg hover:bg-slate-100 text-xs font-bold text-slate-800">A+</button>
+                </div>
+
+                <!-- Sottomenu Penna & Evidenziatore -->
+                <div id="sub-toolbar-draw" class="hidden flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-xl border border-slate-200 shrink-0">
+                    <button onclick="setStrokeColor('#0F172A')" class="color-dot w-6 h-6 rounded-full bg-slate-900 ring-2 ring-offset-1 ring-blue-500" data-color="#0F172A"></button>
+                    <button onclick="setStrokeColor('#2563EB')" class="color-dot w-6 h-6 rounded-full bg-blue-600" data-color="#2563EB"></button>
+                    <button onclick="setStrokeColor('#DC2626')" class="color-dot w-6 h-6 rounded-full bg-red-600" data-color="#DC2626"></button>
+                    <button onclick="setStrokeColor('#16A34A')" class="color-dot w-6 h-6 rounded-full bg-green-600" data-color="#16A34A"></button>
+                    <button onclick="setStrokeColor('#FACC15')" class="color-dot w-6 h-6 rounded-full bg-yellow-400" data-color="#FACC15"></button>
+                    <div class="h-4 w-[1px] bg-slate-200 mx-1"></div>
+                    <button onclick="setStrokeWidth(2.5)" class="px-2 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-700">Fine</button>
+                    <button onclick="setStrokeWidth(6)" class="px-2 py-1 rounded-lg text-xs font-bold hover:bg-slate-100 text-slate-700">Medio</button>
+                    <button onclick="setStrokeWidth(16)" class="px-2 py-1 rounded-lg text-xs font-bold hover:bg-slate-100 text-slate-700">Largo</button>
+                </div>
+
+                <div class="flex items-center gap-1 shrink-0">
+                    <button onclick="undoCanvas()" class="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 active:scale-90 transition" title="Annulla tratto">
+                        <i class="ph-bold ph-arrow-u-up-left text-base"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- FOGLIO DIGITALE -->
+            <div class="flex-1 overflow-y-auto p-3 sm:p-6">
+                <div class="max-w-3xl mx-auto">
+                    <div class="flex items-center justify-between text-xs text-slate-500 mb-2 px-1">
+                        <span id="page-date-label">Data</span>
+                        <span id="active-tool-hint" class="font-medium text-blue-600">Modalità Tastiera</span>
+                    </div>
+
+                    <div id="paper-container" class="paper-sheet paper-lined">
+                        <div id="note-text-layer" contenteditable="true" oninput="saveCurrentNotebook()" 
+                            data-placeholder="Scrivi qui i tuoi appunti, oppure usa 'Registra Lezione' per sbobinare automaticamente l'audio con l'intelligenza artificiale..."></div>
+                        <canvas id="drawing-canvas"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== REGISTRATORE & SBOBINATORE AI ==================== -->
+        <div id="recorder-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <div class="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 class="font-display font-bold text-lg text-slate-900 flex items-center gap-2">
+                            <i class="ph-fill ph-microphone text-rose-500"></i> Registra & Sbobina Lezione
+                        </h3>
+                        <p class="text-xs text-slate-500">Riconoscimento vocale italiano + Pulizia IA offline</p>
+                    </div>
+                    <button onclick="closeRecorderPanel()" class="w-8 h-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center">
+                        <i class="ph-bold ph-x"></i>
+                    </button>
+                </div>
+
+                <div class="bg-slate-900 text-white rounded-2xl p-4 mb-4 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <button id="btn-rec-toggle" onclick="toggleVoiceRecording()" class="w-12 h-12 rounded-full bg-rose-500 hover:bg-rose-600 flex items-center justify-center shadow-lg transition">
+                            <i id="rec-btn-icon" class="ph-fill ph-microphone text-2xl"></i>
+                        </button>
+                        <div>
+                            <div id="rec-status-label" class="text-sm font-bold">Premi per registrare</div>
+                            <div id="rec-sub-label" class="text-xs text-slate-400">Trascrizione live in italiano</div>
+                        </div>
+                    </div>
+                    <div id="rec-clock" class="font-mono text-xl font-bold text-rose-400">00:00</div>
+                </div>
+
+                <div class="mb-4">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <label class="text-xs font-bold text-slate-700">Testo trascritto:</label>
+                        <button onclick="insertDemoLectureText()" class="text-xs font-semibold text-blue-600 hover:underline flex items-center gap-1">
+                            <i class="ph-bold ph-sparkle"></i> Carica lezione demo
+                        </button>
+                    </div>
+                    <textarea id="speech-raw-output" rows="4" placeholder="Parla al microfono oppure inserisci qui il testo della lezione..."
+                        class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm text-slate-800 focus:outline-none focus:border-blue-500 leading-relaxed"></textarea>
+                </div>
+
+                <button onclick="transcribeAndFormatFreeAI()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl shadow-md active:scale-98 transition flex items-center justify-center gap-2">
+                    <i class="ph-fill ph-magic-wand text-lg"></i>
+                    <span>Sbobina, Pulisci e Inserisci nel Quaderno</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- ==================== ASSISTENTE AI STUDIO ==================== -->
+        <div id="ai-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <div class="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-9 h-9 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
+                            <i class="ph-fill ph-sparkle text-xl"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-display font-bold text-lg text-slate-900">AI Studio Intelligente</h3>
+                            <p class="text-xs text-emerald-600 font-semibold">Funziona offline per migliorare i tuoi appunti</p>
+                        </div>
+                    </div>
+                    <button onclick="closeAiPanel()" class="w-8 h-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center">
+                        <i class="ph-bold ph-x"></i>
+                    </button>
+                </div>
+
+                <div class="space-y-2.5">
+                    <button onclick="runFreeAiTool('clean_structure')" class="w-full text-left p-3.5 rounded-2xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50/40 transition flex items-start gap-3">
+                        <i class="ph-fill ph-text-align-left text-2xl text-blue-600 mt-0.5"></i>
+                        <div>
+                            <div class="font-bold text-sm text-slate-900">Ristruttura & Pulisci Appunti</div>
+                            <div class="text-xs text-slate-500 mt-0.5">Rimuove le ripetizioni del parlato e crea paragrafi ordinati.</div>
+                        </div>
+                    </button>
+
+                    <button onclick="runFreeAiTool('auto_highlight')" class="w-full text-left p-3.5 rounded-2xl border border-slate-200 hover:border-amber-500 hover:bg-amber-50/40 transition flex items-start gap-3">
+                        <i class="ph-fill ph-highlighter text-2xl text-amber-500 mt-0.5"></i>
+                        <div>
+                            <div class="font-bold text-sm text-slate-900">Evidenzia Concetti Chiave</div>
+                            <div class="text-xs text-slate-500 mt-0.5">Evidenzia automaticamente date, definizioni e termini importanti.</div>
+                        </div>
+                    </button>
+
+                    <button onclick="runFreeAiTool('summary_bullets')" class="w-full text-left p-3.5 rounded-2xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/40 transition flex items-start gap-3">
+                        <i class="ph-fill ph-list-checks text-2xl text-emerald-600 mt-0.5"></i>
+                        <div>
+                            <div class="font-bold text-sm text-slate-900">Genera Schema Riassuntivo</div>
+                            <div class="text-xs text-slate-500 mt-0.5">Estrae i punti chiave sotto forma di elenco puntato per lo studio.</div>
+                        </div>
+                    </button>
+
+                    <button onclick="runFreeAiTool('generate_quiz')" class="w-full text-left p-3.5 rounded-2xl border border-slate-200 hover:border-purple-500 hover:bg-purple-50/40 transition flex items-start gap-3">
+                        <i class="ph-fill ph-exam text-2xl text-purple-600 mt-0.5"></i>
+                        <div>
+                            <div class="font-bold text-sm text-slate-900">Crea Domande di Verifica</div>
+                            <div class="text-xs text-slate-500 mt-0.5">Genera domande e risposte guida per l'interrogazione.</div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== OPZIONI FOGLIO & ESPORTAZIONE ==================== -->
+        <div id="paper-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="font-display font-bold text-lg text-slate-900">Modello Carta & Opzioni</h3>
+                    <button onclick="closePaperMenu()" class="w-8 h-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center">
+                        <i class="ph-bold ph-x"></i>
+                    </button>
+                </div>
+
+                <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Sfondo Pagina</label>
+                <div class="grid grid-cols-5 gap-2 mb-5">
+                    <button onclick="setPaperStyle('paper-blank')" class="p-2 rounded-xl border border-slate-200 hover:border-blue-500 text-center">
+                        <div class="w-full h-8 bg-white border border-slate-200 rounded-md mb-1"></div>
+                        <span class="text-[11px] font-semibold">Bianco</span>
+                    </button>
+                    <button onclick="setPaperStyle('paper-lined')" class="p-2 rounded-xl border border-slate-200 hover:border-blue-500 text-center">
+                        <div class="w-full h-8 paper-lined border border-slate-200 rounded-md mb-1"></div>
+                        <span class="text-[11px] font-semibold">Righe</span>
+                    </button>
+                    <button onclick="setPaperStyle('paper-grid')" class="p-2 rounded-xl border border-slate-200 hover:border-blue-500 text-center">
+                        <div class="w-full h-8 paper-grid border border-slate-200 rounded-md mb-1"></div>
+                        <span class="text-[11px] font-semibold">Quadri</span>
+                    </button>
+                    <button onclick="setPaperStyle('paper-dotted')" class="p-2 rounded-xl border border-slate-200 hover:border-blue-500 text-center">
+                        <div class="w-full h-8 paper-dotted border border-slate-200 rounded-md mb-1"></div>
+                        <span class="text-[11px] font-semibold">Punti</span>
+                    </button>
+                    <button onclick="setPaperStyle('paper-ivory')" class="p-2 rounded-xl border border-slate-200 hover:border-blue-500 text-center">
+                        <div class="w-full h-8 bg-[#FDFBF7] border border-slate-200 rounded-md mb-1"></div>
+                        <span class="text-[11px] font-semibold">Avorio</span>
+                    </button>
+                </div>
+
+                <div class="space-y-2">
+                    <button onclick="clearCanvasOnly()" class="w-full flex items-center gap-3 p-3 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold text-sm">
+                        <i class="ph-bold ph-eraser text-lg text-amber-600"></i>
+                        <span>Cancella disegni a penna</span>
+                    </button>
+                    <button onclick="exportCurrentNotebookHtml()" class="w-full flex items-center gap-3 p-3 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold text-sm">
+                        <i class="ph-bold ph-download-simple text-lg text-blue-600"></i>
+                        <span>Esporta foglio (HTML / PDF)</span>
+                    </button>
+                    <button onclick="deleteCurrentNotebook()" class="w-full flex items-center gap-3 p-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold text-sm">
+                        <i class="ph-bold ph-trash text-lg"></i>
+                        <span>Elimina questo quaderno</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== MODAL NUOVO QUADERNO ==================== -->
+        <div id="new-notebook-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <div class="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl">
+                <h3 class="font-display font-bold text-lg text-slate-900 mb-4">Nuovo Quaderno Scolastico</h3>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1">Titolo Quaderno</label>
+                        <input type="text" id="new-nb-title" placeholder="Es. Appunti di Filosofia"
+                            class="w-full border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-blue-600">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1">Materia</label>
+                        <select id="new-nb-subject" class="w-full border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm bg-white focus:outline-none focus:border-blue-600">
+                            <option value="Storia">Storia</option>
+                            <option value="Filosofia">Filosofia</option>
+                            <option value="Matematica">Matematica</option>
+                            <option value="Informatica">Informatica</option>
+                            <option value="Biologia">Biologia</option>
+                            <option value="Letteratura">Letteratura</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1.5">Colore Copertina</label>
+                        <div class="flex items-center gap-3" id="cover-color-picker">
+                            <button type="button" onclick="selectCoverColor('from-blue-600 to-indigo-700', this)" class="cover-choice w-9 h-9 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 ring-2 ring-offset-2 ring-slate-900"></button>
+                            <button type="button" onclick="selectCoverColor('from-emerald-500 to-teal-700', this)" class="cover-choice w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500 to-teal-700"></button>
+                            <button type="button" onclick="selectCoverColor('from-amber-500 to-orange-600', this)" class="cover-choice w-9 h-9 rounded-full bg-gradient-to-br from-amber-500 to-orange-600"></button>
+                            <button type="button" onclick="selectCoverColor('from-rose-500 to-pink-700', this)" class="cover-choice w-9 h-9 rounded-full bg-gradient-to-br from-rose-500 to-pink-700"></button>
+                            <button type="button" onclick="selectCoverColor('from-slate-700 to-slate-900', this)" class="cover-choice w-9 h-9 rounded-full bg-gradient-to-br from-slate-700 to-slate-900"></button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3 mt-6">
+                    <button onclick="closeNewNotebookModal()" class="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-bold text-sm">Annulla</button>
+                    <button onclick="confirmCreateNotebook()" class="flex-1 py-2.5 rounded-xl bg-blue-600 text-white font-bold text-sm shadow-sm">Crea Quaderno</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== MODAL GUIDA & GENERATORE APK ANDROID ==================== -->
+        <div id="apk-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl max-h-[85vh] overflow-y-auto">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                            <i class="ph-fill ph-android-logo text-2xl"></i>
+                        </div>
+                        <h3 class="font-display font-bold text-lg text-slate-900">Installazione & Generatore APK</h3>
+                    </div>
+                    <button onclick="closeApkModal()" class="w-8 h-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center">
+                        <i class="ph-bold ph-x"></i>
+                    </button>
+                </div>
+
+                <div class="space-y-4 text-xs text-slate-600 leading-relaxed">
+                    <div class="bg-emerald-50 p-4 rounded-2xl border border-emerald-200">
+                        <div class="font-bold text-emerald-950 text-sm mb-1">Opzione 1: Installa direttamente su Android (PWA)</div>
+                        <p class="mb-2">Apri questa pagina con <strong>Google Chrome</strong> sul tuo smartphone Android, tocca il menu in alto a destra (i tre puntini <strong>⋮</strong>) e seleziona <strong>"Aggiungi a schermata Home"</strong> o <strong>"Installa app"</strong>. L'app si aprirà a schermo intero come una vera app nativa.</p>
+                        <button onclick="triggerPwaInstallPrompt()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition">
+                            <i class="ph-bold ph-download-simple text-base"></i> Richiedi Installazione Rapida
+                        </button>
+                    </div>
+
+                    <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                        <div class="font-bold text-slate-900 text-sm mb-1">Opzione 2: Generare il file .APK per il progetto scolastico</div>
+                        <p class="mb-2">Poiché questa applicazione è un file singolo autonomo, puoi generare l'effettivo file installabile <code class="bg-slate-200 px-1 rounded">.apk</code> in 1 minuto:</p>
+                        <ol class="list-decimal pl-4 space-y-1.5 text-slate-700">
+                            <li>Salva questo codice sul tuo computer come file <code class="bg-slate-200 px-1 rounded">index.html</code>.</li>
+                            <li>Vai sul sito gratuito <strong><a href="https://pwabuilder.com" target="_blank" class="text-blue-600 underline">PWABuilder.com</a></strong> (oppure usa <em>Website 2 APK Builder</em>).</li>
+                            <li>Carica la pagina o inserisci il link di pubblicazione (es. GitHub Pages / Netlify).</li>
+                            <li>Clicca su <strong>"Generate APK"</strong> per scaricare direttamente sul telefono il pacchetto <code class="bg-slate-200 px-1 rounded">.apk</code> pronto per la verifica.</li>
+                        </ol>
+                    </div>
+                </div>
+
+                <button onclick="closeApkModal()" class="w-full mt-5 bg-slate-900 text-white font-bold py-3 rounded-xl text-sm">Chiudi Guida</button>
+            </div>
+        </div>
+
+        <!-- ==================== TOAST ==================== -->
+        <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 py-2.5 rounded-full text-xs font-semibold shadow-xl z-50 flex items-center gap-2 transition-all duration-300 opacity-0 pointer-events-none">
+            <i class="ph-fill ph-check-circle text-emerald-400 text-base"></i>
+            <span id="toast-text">Salvato</span>
+        </div>
+
+    </div>
+
+    <script>
+        // ==================== STATO & ARCHIVIO QUADERNI ====================
+        let notebooks = [];
+        let activeNotebookId = null;
+        let selectedCoverGradient = 'from-blue-600 to-indigo-700';
+        let currentFontSize = 17;
+        let deferredPrompt = null;
+
+        const DEFAULT_NOTEBOOKS = [
+            {
+                id: 'nb-1',
+                title: 'Storia Contemporanea',
+                subject: 'Storia',
+                cover: 'from-amber-500 to-orange-600',
+                paperStyle: 'paper-lined',
+                updatedAt: 'Oggi',
+                htmlContent: `<h2>La Rivoluzione Industriale</h2><p>La <b>Prima Rivoluzione Industriale</b> ebbe inizio in <span style="background-color: #FEF08A;">Inghilterra tra il 1760 e il 1830</span>, trasformando radicalmente il sistema economico europeo.</p><h3>Punti chiave:</h3><ul><li>Invenzione della <b>macchina a vapore</b> (James Watt, 1769).</li><li>Sfruttamento intensivo di <span style="background-color: #BBF7D0;">carbone e ferro</span>.</li><li>Urbanizzazione rapida e nascita del proletariato industriale.</li></ul>`,
+                canvasDataUrl: null
+            },
+            {
+                id: 'nb-2',
+                title: 'Filosofia Moderna',
+                subject: 'Filosofia',
+                cover: 'from-blue-600 to-indigo-700',
+                paperStyle: 'paper-grid',
+                updatedAt: 'Ieri',
+                htmlContent: `<h2>Cartesio e il Cogito</h2><p>Renato Cartesio fonda il razionalismo moderno attraverso il celebre principio <i>"Cogito, ergo sum"</i> (<span style="background-color: #FEF08A;">penso, dunque sono</span>).</p>`,
+                canvasDataUrl: null
+            }
+        ];
+
+        window.onload = function() {
+            loadNotebooks();
+            renderLibrary();
+            setupCanvasEvents();
+
+            window.addEventListener('beforeinstallprompt', (e) => {
+                e.preventDefault();
+                deferredPrompt = e;
+            });
+        };
+
+        function loadNotebooks() {
+            try {
+                const raw = localStorage.getItem('goodnotes_school_ai_v2');
+                notebooks = raw ? JSON.parse(raw) : DEFAULT_NOTEBOOKS;
+                if (!raw) saveAllNotebooks();
+            } catch (e) {
+                notebooks = DEFAULT_NOTEBOOKS;
+            }
+        }
+
+        function saveAllNotebooks() {
+            try {
+                localStorage.setItem('goodnotes_school_ai_v2', JSON.stringify(notebooks));
+            } catch (e) {}
+        }
+
+        // ==================== LIBRERIA ====================
+        function renderLibrary() {
+            const grid = document.getElementById('notebooks-grid');
+            const query = document.getElementById('library-search').value.toLowerCase().trim();
+
+            const filtered = notebooks.filter(nb => 
+                nb.title.toLowerCase().includes(query) || 
+                nb.subject.toLowerCase().includes(query) ||
+                stripHtml(nb.htmlContent).toLowerCase().includes(query)
+            );
+
+            document.getElementById('notebooks-count').textContent = `${filtered.length} quadern${filtered.length === 1 ? 'o' : 'i'}`;
+
+            let html = `
+                <button onclick="openNewNotebookModal()" class="notebook-cover bg-white border-2 border-dashed border-slate-300 hover:border-blue-500 flex flex-col items-center justify-center p-4 text-slate-500 hover:text-blue-600 transition group">
+                    <div class="w-12 h-12 rounded-full bg-slate-100 group-hover:bg-blue-50 flex items-center justify-center mb-2 transition">
+                        <i class="ph-bold ph-plus text-2xl"></i>
+                    </div>
+                    <span class="font-display font-bold text-sm">Nuovo Quaderno</span>
+                </button>
+            `;
+
+            html += filtered.map(nb => `
+                <div onclick="openNotebook('${nb.id}')" class="cursor-pointer group">
+                    <div class="notebook-cover bg-gradient-to-br ${nb.cover} p-4 flex flex-col justify-between text-white">
+                        <div class="pl-3">
+                            <span class="inline-block bg-white/20 backdrop-blur-xs text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md">
+                                ${escapeHtml(nb.subject)}
+                            </span>
+                        </div>
+                        <div class="pl-3 bg-white/95 text-slate-900 p-2.5 rounded-lg shadow-xs">
+                            <div class="font-display font-bold text-xs sm:text-sm line-clamp-2 leading-snug">${escapeHtml(nb.title)}</div>
+                            <div class="text-[10px] text-slate-400 mt-1">${nb.updatedAt}</div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            grid.innerHTML = html;
+        }
+
+        function openNewNotebookModal() {
+            document.getElementById('new-nb-title').value = '';
+            document.getElementById('new-notebook-modal').classList.remove('hidden');
+        }
+
+        function closeNewNotebookModal() {
+            document.getElementById('new-notebook-modal').classList.add('hidden');
+        }
+
+        function selectCoverColor(gradientClass, btn) {
+            selectedCoverGradient = gradientClass;
+            document.querySelectorAll('.cover-choice').forEach(el => el.classList.remove('ring-2', 'ring-offset-2', 'ring-slate-900'));
+            btn.classList.add('ring-2', 'ring-offset-2', 'ring-slate-900');
+        }
+
+        function confirmCreateNotebook() {
+            const title = document.getElementById('new-nb-title').value.trim() || 'Appunti Scolastici';
+            const subject = document.getElementById('new-nb-subject').value;
+            const newNb = {
+                id: 'nb-' + Date.now(),
+                title: title,
+                subject: subject,
+                cover: selectedCoverGradient,
+                paperStyle: 'paper-lined',
+                updatedAt: 'Oggi',
+                htmlContent: '',
+                canvasDataUrl: null
+            };
+            notebooks.unshift(newNb);
+            saveAllNotebooks();
+            closeNewNotebookModal();
+            openNotebook(newNb.id);
+        }
+
+        function openNotebook(id) {
+            activeNotebookId = id;
+            const nb = notebooks.find(n => n.id === id);
+            if (!nb) return;
+
+            document.getElementById('notebook-title-input').value = nb.title;
+            document.getElementById('notebook-subject-badge').textContent = nb.subject;
+            document.getElementById('page-date-label').textContent = `Aggiornato: ${nb.updatedAt}`;
+            
+            const paper = document.getElementById('paper-container');
+            paper.className = `paper-sheet ${nb.paperStyle || 'paper-lined'}`;
+
+            const editor = document.getElementById('note-text-layer');
+            editor.innerHTML = nb.htmlContent || '';
+
+            document.getElementById('view-library').classList.add('hidden');
+            document.getElementById('view-editor').classList.remove('hidden');
+
+            setTool('text');
+            resizeAndRestoreCanvas(nb.canvasDataUrl);
+        }
+
+        function closeNotebook() {
+            saveCurrentNotebook();
+            activeNotebookId = null;
+            document.getElementById('view-editor').classList.add('hidden');
+            document.getElementById('view-library').classList.remove('hidden');
+            renderLibrary();
+        }
+
+        function saveCurrentNotebook() {
+            if (!activeNotebookId) return;
+            const idx = notebooks.findIndex(n => n.id === activeNotebookId);
+            if (idx === -1) return;
+
+            const canvas = document.getElementById('drawing-canvas');
+            notebooks[idx].title = document.getElementById('notebook-title-input').value.trim() || 'Senza titolo';
+            notebooks[idx].htmlContent = document.getElementById('note-text-layer').innerHTML;
+            notebooks[idx].updatedAt = 'Oggi';
+            try {
+                notebooks[idx].canvasDataUrl = canvas.toDataURL('image/png');
+            } catch (e) {}
+
+            saveAllNotebooks();
+            document.getElementById('save-indicator').textContent = 'Salvato';
+        }
+
+        // ==================== STRUMENTI GOODNOTES ====================
+        let currentTool = 'text';
+        let strokeColor = '#0F172A';
+        let strokeWidth = 2.5;
+        let isDrawing = false;
+        let canvasHistory = [];
+
+        function setTool(tool) {
+            currentTool = tool;
+            const canvas = document.getElementById('drawing-canvas');
+            const subText = document.getElementById('sub-toolbar-text');
+            const subDraw = document.getElementById('sub-toolbar-draw');
+            const hint = document.getElementById('active-tool-hint');
+
+            document.querySelectorAll('.tool-btn').forEach(btn => {
+                btn.classList.remove('bg-blue-600', 'text-white');
+                btn.classList.add('text-slate-600');
+            });
+            const activeBtn = document.getElementById(`tool-${tool}`);
+            activeBtn.classList.remove('text-slate-600');
+            activeBtn.classList.add('bg-blue-600', 'text-white');
+
+            if (tool === 'text') {
+                canvas.classList.remove('active-draw');
+                subText.classList.remove('hidden');
+                subDraw.classList.add('hidden');
+                hint.textContent = "Modalità Tastiera";
+            } else {
+                canvas.classList.add('active-draw');
+                subText.classList.add('hidden');
+                subDraw.classList.remove('hidden');
+
+                if (tool === 'pen') {
+                    strokeWidth = 2.5;
+                    if (strokeColor === '#FACC15') setStrokeColor('#0F172A');
+                    hint.textContent = "Penna attiva (scrivi a mano libera)";
+                } else if (tool === 'highlighter') {
+                    strokeWidth = 16;
+                    setStrokeColor('#FACC15');
+                    hint.textContent = "Evidenziatore attivo";
+                } else if (tool === 'eraser') {
+                    strokeWidth = 24;
+                    hint.textContent = "Gomma attiva";
+                }
+            }
+        }
+
+        function setStrokeColor(color) {
+            strokeColor = color;
+            document.querySelectorAll('.color-dot').forEach(dot => {
+                if (dot.dataset.color === color) {
+                    dot.classList.add('ring-2', 'ring-offset-1', 'ring-blue-500');
+                } else {
+                    dot.classList.remove('ring-2', 'ring-offset-1', 'ring-blue-500');
+                }
+            });
+        }
+
+        function setStrokeWidth(w) { strokeWidth = w; }
+
+        function execTextCmd(cmd, val = null) {
+            document.getElementById('note-text-layer').focus();
+            document.execCommand(cmd, false, val);
+            saveCurrentNotebook();
+        }
+
+        function highlightSelectedText(color) {
+            const sel = window.getSelection();
+            if (!sel.rangeCount || sel.isCollapsed) {
+                showToast("Seleziona prima del testo!");
+                return;
+            }
+            document.getElementById('note-text-layer').focus();
+            if (!document.execCommand('hiliteColor', false, color)) {
+                document.execCommand('backColor', false, color);
+            }
+            saveCurrentNotebook();
+        }
+
+        function changeFontSize(delta) {
+            currentFontSize = Math.min(24, Math.max(14, currentFontSize + delta));
+            document.getElementById('note-text-layer').style.fontSize = currentFontSize + 'px';
+            showToast(`Testo: ${currentFontSize}px`);
+        }
+
+        // ==================== MOTORE CANVAS VETTORIALE ====================
+        function resizeAndRestoreCanvas(dataUrl) {
+            const container = document.getElementById('paper-container');
+            const canvas = document.getElementById('drawing-canvas');
+            const ctx = canvas.getContext('2d');
+
+            const rect = container.getBoundingClientRect();
+            canvas.width = rect.width || 720;
+            canvas.height = Math.max(container.scrollHeight, 820);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            canvasHistory = [];
+
+            if (dataUrl) {
+                const img = new Image();
+                img.onload = () => {
+                    ctx.drawImage(img, 0, 0);
+                    saveCanvasState();
+                };
+                img.src = dataUrl;
+            } else {
+                saveCanvasState();
+            }
+        }
+
+        function saveCanvasState() {
+            const canvas = document.getElementById('drawing-canvas');
+            if (canvasHistory.length > 15) canvasHistory.shift();
+            canvasHistory.push(canvas.toDataURL());
+        }
+
+        function undoCanvas() {
+            if (canvasHistory.length <= 1) {
+                showToast("Nulla da annullare");
+                return;
+            }
+            canvasHistory.pop();
+            const prevState = canvasHistory[canvasHistory.length - 1];
+            const canvas = document.getElementById('drawing-canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            img.onload = () => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0);
+                saveCurrentNotebook();
+            };
+            img.src = prevState;
+        }
+
+        function setupCanvasEvents() {
+            const canvas = document.getElementById('drawing-canvas');
+            const ctx = canvas.getContext('2d');
+
+            function getCoords(e) {
+                const rect = canvas.getBoundingClientRect();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return {
+                    x: (clientX - rect.left) * (canvas.width / rect.width),
+                    y: (clientY - rect.top) * (canvas.height / rect.height)
+                };
+            }
+
+            function startStroke(e) {
+                if (currentTool === 'text') return;
+                isDrawing = true;
+                const pos = getCoords(e);
+                ctx.beginPath();
+                ctx.moveTo(pos.x, pos.y);
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+
+                if (currentTool === 'eraser') {
+                    ctx.globalCompositeOperation = 'destination-out';
+                    ctx.lineWidth = 26;
+                } else if (currentTool === 'highlighter') {
+                    ctx.globalCompositeOperation = 'multiply';
+                    ctx.strokeStyle = 'rgba(253, 224, 71, 0.45)';
+                    ctx.lineWidth = 18;
+                } else {
+                    ctx.globalCompositeOperation = 'source-over';
+                    ctx.strokeStyle = strokeColor;
+                    ctx.lineWidth = strokeWidth;
+                }
+            }
+
+            function moveStroke(e) {
+                if (!isDrawing) return;
+                if (e.cancelable) e.preventDefault();
+                const pos = getCoords(e);
+                ctx.lineTo(pos.x, pos.y);
+                ctx.stroke();
+            }
+
+            function endStroke() {
+                if (!isDrawing) return;
+                isDrawing = false;
+                ctx.closePath();
+                ctx.globalCompositeOperation = 'source-over';
+                saveCanvasState();
+                saveCurrentNotebook();
+            }
+
+            canvas.addEventListener('mousedown', startStroke);
+            canvas.addEventListener('mousemove', moveStroke);
+            window.addEventListener('mouseup', endStroke);
+
+            canvas.addEventListener('touchstart', startStroke, { passive: false });
+            canvas.addEventListener('touchmove', moveStroke, { passive: false });
+            canvas.addEventListener('touchend', endStroke);
+        }
+
+        // ==================== REGISTRAZIONE & AI OFFLINE ====================
+        let isVoiceRec = false;
+        let speechRec = null;
+        let recTimer = null;
+        let secondsElapsed = 0;
+
+        function openRecorderPanel() { document.getElementById('recorder-modal').classList.remove('hidden'); }
+        function closeRecorderPanel() {
+            if (isVoiceRec) stopVoiceRecording();
+            document.getElementById('recorder-modal').classList.add('hidden');
+        }
+
+        function toggleVoiceRecording() {
+            if (isVoiceRec) stopVoiceRecording();
+            else startVoiceRecording();
+        }
+
+        function startVoiceRecording() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                showToast("Usa 'Carica lezione demo' (microfono non supportato qui)");
+                insertDemoLectureText();
+                return;
+            }
+
+            try {
+                speechRec = new SpeechRecognition();
+                speechRec.lang = 'it-IT';
+                speechRec.continuous = true;
+                speechRec.interimResults = true;
+
+                const outputBox = document.getElementById('speech-raw-output');
+                let accumulated = outputBox.value ? outputBox.value.trim() + ' ' : '';
+
+                speechRec.onresult = (event) => {
+                    let interim = '';
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        if (event.results[i].isFinal) accumulated += event.results[i][0].transcript + '. ';
+                        else interim += event.results[i][0].transcript;
+                    }
+                    outputBox.value = accumulated + interim;
+                };
+
+                speechRec.start();
+                isVoiceRec = true;
+
+                document.getElementById('btn-rec-toggle').classList.add('animate-rec');
+                document.getElementById('rec-btn-icon').className = 'ph-fill ph-stop text-2xl';
+                document.getElementById('rec-status-label').textContent = 'Registrazione in corso...';
+
+                secondsElapsed = 0;
+                recTimer = setInterval(() => {
+                    secondsElapsed++;
+                    const m = String(Math.floor(secondsElapsed / 60)).padStart(2, '0');
+                    const s = String(secondsElapsed % 60).padStart(2, '0');
+                    document.getElementById('rec-clock').textContent = `${m}:${s}`;
+                }, 1000);
+            } catch (e) {
+                showToast("Errore avvio microfono");
+            }
+        }
+
+        function stopVoiceRecording() {
+            isVoiceRec = false;
+            clearInterval(recTimer);
+            if (speechRec) { try { speechRec.stop(); } catch (e) {} }
+            document.getElementById('btn-rec-toggle').classList.remove('animate-rec');
+            document.getElementById('rec-btn-icon').className = 'ph-fill ph-microphone text-2xl';
+            document.getElementById('rec-status-label').textContent = 'Registrazione fermata';
+        }
+
+        function insertDemoLectureText() {
+            const nb = notebooks.find(n => n.id === activeNotebookId);
+            const subj = nb ? nb.subject : 'Storia';
+            const samples = {
+                'Storia': "Allora ragazzi oggi spieghiamo la Rivoluzione Francese del 1789. Diciamo che la presa della Bastiglia avvenne il 14 luglio 1789 e segnò la fine dell'Ancien Régime, portando alla Dichiarazione dei diritti dell'uomo e del cittadino.",
+                'Filosofia': "Allora oggi parliamo di Friedrich Nietzsche e della teoria del superuomo. Cioè il superuomo è colui che sa accettare la morte di Dio e crea nuovi valori basati sulla volontà di potenza.",
+                'Informatica': "Diciamo che oggi vediamo il funzionamento dei database relazionali SQL. Cioè le tabelle sono collegate tramite chiavi primarie ed esterne per garantire integrità e velocità nelle query."
+            };
+            document.getElementById('speech-raw-output').value = samples[subj] || samples['Storia'];
+            showToast("Lezione demo caricata!");
+        }
+
+        function transcribeAndFormatFreeAI() {
+            if (isVoiceRec) stopVoiceRecording();
+            const raw = document.getElementById('speech-raw-output').value.trim();
+            if (!raw) {
+                showToast("Inserisci del testo prima di sbobinare!");
+                return;
+            }
+
+            const formatted = localAiEngine(raw, 'transcribe');
+            const editor = document.getElementById('note-text-layer');
+            editor.innerHTML += (editor.innerHTML ? '<br>' : '') + formatted;
+
+            closeRecorderPanel();
+            saveCurrentNotebook();
+            showToast("Sbobinatura AI completata!");
+        }
+
+        function openAiPanel() { document.getElementById('ai-modal').classList.remove('hidden'); }
+        function closeAiPanel() { document.getElementById('ai-modal').classList.add('hidden'); }
+
+        function runFreeAiTool(mode) {
+            const editor = document.getElementById('note-text-layer');
+            const plain = editor.innerText.trim();
+            if (!plain) {
+                closeAiPanel();
+                showToast("Scrivi prima qualcosa nel quaderno!");
+                return;
+            }
+
+            closeAiPanel();
+            const result = localAiEngine(plain, mode);
+            if (mode === 'clean_structure' || mode === 'auto_highlight') {
+                editor.innerHTML = result;
+            } else {
+                editor.innerHTML += `<br>` + result;
+            }
+            saveCurrentNotebook();
+            showToast("AI Studio ha elaborato i tuoi appunti!");
+        }
+
+        function localAiEngine(text, mode) {
+            let cleaned = text
+                .replace(/\b(allora|cioè|praticamente|diciamo|ehm|beh|insomma|ecco)\b[,\s]*/gi, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+
+            let sentences = cleaned.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length > 3);
+            if (sentences.length === 0) sentences = [cleaned];
+
+            const norm = sentences.map(s => {
+                let st = s.charAt(0).toUpperCase() + s.slice(1);
+                if (!/[.!?]$/.test(st)) st += '.';
+                return st;
+            });
+
+            const words = cleaned.toLowerCase().match(/[a-zàèéìòù]{5,}/g) || [];
+            const freq = {};
+            words.forEach(w => freq[w] = (freq[w] || 0) + 1);
+            const topKw = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 5).map(e => e[0]);
+
+            function highlight(html) {
+                let res = html.replace(/\b(\d{3,4})\b/g, '<span style="background-color: #FEF08A;"><b>$1</b></span>');
+                topKw.slice(0, 3).forEach(kw => {
+                    const rx = new RegExp(`\\b(${kw})\\b`, 'gi');
+                    res = res.replace(rx, '<span style="background-color: #BBF7D0;"><b>$1</b></span>');
+                });
+                return res;
+            }
+
+            if (mode === 'transcribe' || mode === 'clean_structure') {
+                return `<h3>🎙️ Sbobinatura AI</h3>` + norm.map(s => `<p>${highlight(escapeHtml(s))}</p>`).join('');
+            }
+            if (mode === 'auto_highlight') {
+                return norm.map(s => `<p>${highlight(escapeHtml(s))}</p>`).join('');
+            }
+            if (mode === 'summary_bullets') {
+                const list = norm.slice(0, 4).map(s => `<li>${highlight(escapeHtml(s))}</li>`).join('');
+                return `<h3>📌 Schema Riassuntivo</h3><ul>${list}</ul>`;
+            }
+            if (mode === 'generate_quiz') {
+                const q = topKw.slice(0, 2).map((kw, i) => `<li><b>Domanda ${i+1}:</b> Spiega il concetto chiave di <u>${escapeHtml(kw)}</u>.<br><span style="color: #2563EB;"><i>Guida:</i> ${escapeHtml(norm[0])}</span></li>`).join('');
+                return `<h3>🎯 Domande di Ripasso</h3><ul>${q}</ul>`;
+            }
+            return norm.map(s => `<p>${escapeHtml(s)}</p>`).join('');
+        }
+
+        // ==================== OPZIONI & APK ====================
+        function openPaperMenu() { document.getElementById('paper-modal').classList.remove('hidden'); }
+        function closePaperMenu() { document.getElementById('paper-modal').classList.add('hidden'); }
+
+        function setPaperStyle(styleClass) {
+            document.getElementById('paper-container').className = `paper-sheet ${styleClass}`;
+            if (activeNotebookId) {
+                const idx = notebooks.findIndex(n => n.id === activeNotebookId);
+                if (idx !== -1) {
+                    notebooks[idx].paperStyle = styleClass;
+                    saveAllNotebooks();
+                }
+            }
+            closePaperMenu();
+        }
+
+        function clearCanvasOnly() {
+            const canvas = document.getElementById('drawing-canvas');
+            canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+            saveCanvasState();
+            saveCurrentNotebook();
+            closePaperMenu();
+            showToast("Disegni a penna cancellati");
+        }
+
+        function exportCurrentNotebookHtml() {
+            closePaperMenu();
+            const nb = notebooks.find(n => n.id === activeNotebookId);
+            if (!nb) return;
+            const docHtml = `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>${escapeHtml(nb.title)}</title><style>body{font-family:Inter,sans-serif;max-width:760px;margin:40px auto;padding:24px;line-height:1.7;color:#0f172a}h1{color:#1e293b;border-bottom:2px solid #e2e8f0;padding-bottom:8px}</style></head><body><h1>${escapeHtml(nb.title)}</h1>${nb.htmlContent}</body></html>`;
+            const blob = new Blob([docHtml], { type: 'text/html;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${nb.title.toLowerCase().replace(/\s+/g, '_')}.html`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast("Quaderno esportato con successo!");
+        }
+
+        function deleteCurrentNotebook() {
+            closePaperMenu();
+            if (!activeNotebookId) return;
+            notebooks = notebooks.filter(n => n.id !== activeNotebookId);
+            saveAllNotebooks();
+            activeNotebookId = null;
+            document.getElementById('view-editor').classList.add('hidden');
+            document.getElementById('view-library').classList.remove('hidden');
+            renderLibrary();
+            showToast("Quaderno eliminato");
+        }
+
+        function openApkModal() { document.getElementById('apk-modal').classList.remove('hidden'); }
+        function closeApkModal() { document.getElementById('apk-modal').classList.add('hidden'); }
+
+        async function triggerPwaInstallPrompt() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const choice = await deferredPrompt.userChoice;
+                if (choice.outcome === 'accepted') {
+                    showToast("App installata con successo!");
+                }
+                deferredPrompt = null;
+            } else {
+                showToast("Apri il menu di Chrome e seleziona 'Aggiungi a schermata Home'");
+            }
+        }
+
+        // ==================== UTILS ====================
+        let toastTimer = null;
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-text').textContent = msg;
+            toast.classList.remove('opacity-0');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => toast.classList.add('opacity-0'), 3000);
+        }
+
+        function stripHtml(html) {
+            const d = document.createElement('div');
+            d.innerHTML = html || '';
+            return d.textContent || d.innerText || '';
+        }
+
+        function escapeHtml(str) {
+            const d = document.createElement('div');
+            d.textContent = str || '';
+            return d.innerHTML;
+        }
+    </script>
+</body>
+</html>
